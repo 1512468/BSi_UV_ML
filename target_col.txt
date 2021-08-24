@@ -1,3 +1,0 @@
-resettable_device_id_or_app_instance_id
-day_diff
-user_value

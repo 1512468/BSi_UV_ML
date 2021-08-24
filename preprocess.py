@@ -1,25 +1,36 @@
 import ReadFile as rf
+import pandas as pd
+from datetime import timedelta
 
-
-def preprocess(data, country, feature, ndays):
+def preprocess(data, dimension, fact):
     
-    X = data[rf.getCol(feature)]
-    X = X[X.country == rf.getCol(country)[0]].fillna(0).drop(columns ='country')
+    dimension = rf.getCol(dimension)
+    fact = rf.getCol(fact)
+    data = data[data.day_diff >= 0]
+    data['day0_date'] = pd.to_datetime(data['day0_date'])
 
-    X_ndays = X[(X.day_diff >= 0) & (X.day_diff <= ndays)]
-    act_date= X_ndays.groupby('resettable_device_id_or_app_instance_id').act_date.agg('max')
-    X_ndays.drop(columns = ['act_date'], inplace = True) 
+    data_dim = data[dimension].groupby('resettable_device_id_or_app_instance_id').agg({'day0_date':'min', 
+    'country':'min', 'media_source':'min', 'day_diff':'max'})
+    data_dim['act_date'] = data_dim.day0_date + timedelta(3)
+    data_dim.loc[data_dim.media_source == 'Organic', 'media_source']= 0
+    data_dim.loc[data_dim.media_source != 0,'media_source']= 1 
+    data_dim.loc[data_dim.country == 'United States', 'country'] = 0
+    data_dim.loc[data_dim.country != 0, 'country'] = 1
+    data_dim['country'] = data_dim.country.astype('int')
+    data_dim['media_source'] = data_dim.media_source.astype('int')
+    data_dim['day0_date'] = data_dim['day0_date'].dt.dayofweek
+    data_dim.reset_index(inplace=True)
+
+ 
+    data_aggregated = data[fact].groupby(['resettable_device_id_or_app_instance_id','day_diff']).agg('sum')
+    data_aggregated = data_aggregated.fillna(0)
+    data_aggregated.reset_index(inplace=True)
     
-    X_ndays_grouped = X_ndays.groupby('resettable_device_id_or_app_instance_id').agg('sum')
-    X_ndays_grouped = X_ndays_grouped[X_ndays_grouped.day_diff >= ndays].drop(columns='day_diff').reset_index()
+    DATA_D3 = data_aggregated[data_aggregated.day_diff <= 3].groupby('resettable_device_id_or_app_instance_id').agg('sum').drop(columns = 'day_diff').add_suffix('_D3')
 
-    X_ndays_grouped = X_ndays_grouped.rename({'user_value':'user_value_' + str(ndays)}, axis=1)
-    X_ndays_grouped['is_ratio'] = X_ndays_grouped.is_ad_value/X_ndays_grouped.is_imp_sum
-    X_ndays_grouped['rv_ratio'] = X_ndays_grouped.rv_ad_value/X_ndays_grouped.rv_imp_sum
-
-    X_join_day = X_ndays_grouped.merge(act_date, on = 'resettable_device_id_or_app_instance_id')
-    act_date = X_join_day.act_date
-    id = X_join_day.resettable_device_id_or_app_instance_id
-    X_clean = X_join_day.drop(columns = ['resettable_device_id_or_app_instance_id','is_ad_value','rv_ad_value', 'bn_ad_value' , 'is_imp_sum', 'rv_imp_sum', 'act_date'])
-    return X_clean, id, act_date
-
+    input = data_dim.merge(DATA_D3, on='resettable_device_id_or_app_instance_id').query('day_diff == 3').drop(columns = 'day_diff')
+    
+    id = input.pop('resettable_device_id_or_app_instance_id')
+    act_date = input.pop('act_date') 
+    
+    return input, id, act_date  
