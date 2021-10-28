@@ -1,0 +1,13 @@
+resettable_device_id_or_app_instance_id
+day_diff
+session_sum
+time_in_game_sum
+battle_end_sum
+rv_imp_sum
+rv_ad_value
+is_imp_sum
+is_ad_value
+iap_count
+iap_value_sum
+ad_value_sum
+user_value_sum

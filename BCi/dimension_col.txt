@@ -1,0 +1,5 @@
+resettable_device_id_or_app_instance_id
+day0_date
+country
+media_source
+day_diff
