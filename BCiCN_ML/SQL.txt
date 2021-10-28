@@ -1,0 +1,120 @@
+WITH
+        data AS
+            (SELECT *, CAST(TIMESTAMP_MICROS(event_timestamp) AS DATE) AS ts 
+            FROM `bubble-classic-718da.analytics_266302904.events_*`
+            WHERE _TABLE_SUFFIX BETWEEN '{install_date}' AND '{execution_date}' 
+            AND platform = TARGET_PLATFORM 
+            AND app_info.id = "com.bubble.classic.cn")
+            
+
+            ,applovin_rev_data AS (
+                SELECT * FROM `bubble-classic-718da.raw_applovin.user_ad_revenue_ios_cn_*`
+                WHERE _TABLE_SUFFIX BETWEEN '{install_date}' AND '{execution_date}' 
+            
+            )
+            ,af_data AS
+            (SELECT COALESCE(advertising_id, IDFA, IDFV) AS IDFA_OR_IDFV, 
+            COALESCE(MAX(Media_Source), 'Organic') AS Media_Source,
+            FROM `bubble-classic-718da.raw_af.install_event_report_ios_cn`
+            WHERE Event_Name = 'install' AND (CAST(Install_Time AS DATE) BETWEEN PARSE_DATE('%Y%m%d', '{install_date}') AND PARSE_DATE('%Y%m%d', '{execution_date}'))
+            GROUP BY IDFA_OR_IDFV)
+        
+        ,id AS
+            (SELECT
+            user_pseudo_id AS app_instance_id,
+            MAX(CASE WHEN device.advertising_id = "" THEN device.vendor_id ELSE device.advertising_id END) AS idfa_or_idfv
+            FROM data
+            GROUP BY app_instance_id)
+         
+	 ,fd AS
+    	     (SELECT
+             COALESCE(id.idfa_or_idfv, user_pseudo_id) AS resettable_device_id_or_app_instance_id
+             ,MIN(ts) AS day0_date
+             ,MAX(geo.country) AS country
+            FROM data, UNNEST(event_params) AS p
+            LEFT JOIN id ON id.app_instance_id = user_pseudo_id
+            WHERE event_name = "first_open" AND (CASE WHEN p.key = "previous_first_open_count" THEN p.value.int_value END) = 0
+            GROUP BY resettable_device_id_or_app_instance_id)   
+
+       
+            ,ad AS (
+        SELECT 
+        COALESCE(id.idfa_or_idfv, id.app_instance_id) AS ad_resettable_device_id_or_app_instance_id
+        ,CAST(DateTime AS DATE) AS act_date
+        ,SUM(COALESCE(Revenue, 0)) AS ad_value
+        ,SUM(CASE WHEN Ad_Format = "INTER" THEN COALESCE(Revenue, 0) END) AS is_ad_value
+        ,SUM(CASE WHEN Ad_Format = "REWARD" THEN COALESCE(Revenue, 0) END) AS rv_ad_value
+        ,SUM(CASE WHEN Ad_Format = "BANNER" THEN COALESCE(Revenue, 0) END) AS bn_ad_value
+        FROM applovin_rev_data 
+        LEFT JOIN id ON UPPER(COALESCE(IDFA, IDFV)) = UPPER(id.idfa_or_idfv)
+        GROUP BY ad_resettable_device_id_or_app_instance_id, act_date       
+    )
+
+            ,udata_no_uv AS
+            (SELECT
+            COALESCE(id.idfa_or_idfv, user_pseudo_id) AS resettable_device_id_or_app_instance_id
+            ,fd.day0_date
+            ,COALESCE(MAX(fd.country), MAX(geo.country)) AS country
+          
+            ,COALESCE(af_data.Media_Source, 'Organic') AS media_source
+
+            ,DATE_DIFF(data.ts, fd.day0_date, DAY) AS day_diff
+            ,data.ts AS act_date
+
+            ,SUM(CASE WHEN event_name = "user_engagement" AND p.key = "engagement_time_msec" THEN p.value.int_value / 1000 END) AS time_in_game
+            ,COUNTIF(event_name IN ("ADS_REWARD_IMPRESSION") AND p.key = "firebase_event_origin") AS rv_imp
+            ,COUNTIF(event_name IN ("ADS_REWARD_REQUEST") AND p.key = "firebase_event_origin") AS rv_click
+            ,COUNTIF(event_name IN ("ADS_INTERSTITIAL_IMPRESSION") AND p.key = "firebase_event_origin") AS is_imp
+            ,COUNTIF(event_name IN ("ADS_INTERSTITIAL_REQUEST") AND p.key = "firebase_event_origin") AS is_click
+            ,COUNTIF(data.event_name IN ("session_start") AND p.key = "firebase_event_origin") AS session
+            ,COUNTIF(event_name = 'PLAY' AND p.key = "firebase_event_origin") AS battle_play
+            ,COUNTIF(event_name = 'END' AND p.key = "firebase_event_origin") AS battle_end
+	    ,COUNTIF(data.event_name IN ("app_exception") AND p.key = "fatal" AND p.value.int_value = 1) AS app_exception_fatal
+	    ,COUNTIF(data.event_name IN ("app_exception") AND p.key = "fatal" AND p.value.int_value = 0) AS app_exception_non_fatal
+            ,SUM(CASE WHEN(event_name = 'in_app_purchase' AND p.key = "firebase_event_origin") THEN event_value_in_usd END) AS iap_value
+            ,COUNTIF(data.event_name = 'in_app_purchase' AND p.key = "firebase_event_origin") AS iap_count
+            
+            FROM data, UNNEST(event_params) AS p
+            LEFT JOIN id ON id.app_instance_id = user_pseudo_id
+            LEFT JOIN fd ON fd.resettable_device_id_or_app_instance_id = COALESCE(id.idfa_or_idfv, user_pseudo_id)
+            LEFT JOIN af_data ON af_data.IDFA_OR_IDFV = id.idfa_or_idfv
+            GROUP BY  resettable_device_id_or_app_instance_id, day0_date, act_date, day_diff, media_source)
+
+        ,udata AS
+            (SELECT
+                udata_no_uv.* ,ad_value ,is_ad_value ,rv_ad_value, bn_ad_value
+            FROM udata_no_uv
+            LEFT JOIN ad ON ad.ad_resettable_device_id_or_app_instance_id = udata_no_uv.resettable_device_id_or_app_instance_id
+            AND ad.act_date = udata_no_uv.act_date 
+            )
+
+
+   
+        SELECT
+          resettable_device_id_or_app_instance_id
+  	  ,day0_date
+  	  ,act_date
+	  ,day_diff
+	  ,country
+	  ,SUM(time_in_game) AS time_in_game_sum
+	  ,SUM(battle_end) AS battle_end_sum
+	  ,SUM(session) AS session_sum
+	  ,SUM(app_exception_fatal) AS app_exception_fatal_sum
+	  ,SUM(app_exception_non_fatal) AS app_exception_non_fatal_sum
+	  ,SUM(is_imp) AS is_imp_sum
+	  ,SUM(rv_imp) AS rv_imp_sum
+	  ,SUM(is_ad_value) AS is_ad_value
+	  ,SUM(rv_ad_value) AS rv_ad_value
+	  ,SUM(bn_ad_value) AS bn_ad_value
+	  ,COALESCE(SUM(iap_value), 0) * 0.7 + COALESCE(SUM(ad_value), 0) AS user_value_sum     
+	  ,SUM(iap_value) * 0.7 AS iap_value_sum
+
+	  ,media_source
+	  ,SUM(iap_count) AS iap_count
+          ,SUM(ad_value) AS ad_value_sum
+
+        FROM udata
+        WHERE day0_date IS NOT NULL 
+        GROUP BY 
+            resettable_device_id_or_app_instance_id , day0_date , country , act_date , day_diff ,media_source
+        )
