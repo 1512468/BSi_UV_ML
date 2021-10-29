@@ -5,10 +5,11 @@ from datetime import date
 from datetime import timedelta
 project_code='BCiCN'
 path = '/root/git_ml/{}/'.format(project_code)
+
 data_path = path + 'input/BCiCN_{}.csv'.format((date.today() - timedelta(1)).strftime("%Y-%m-%d"))
 dimension = path + 'dimension_col.txt'
 fact = path + 'fact_col.txt'
-model = path + 'model_2021-10-28.json'
+model = path + 'model_2021-10-29.json'
 output_path = path + 'output/BCiCN_{}.csv'.format((date.today() - timedelta(1)).strftime("%Y-%m-%d"))
 
 data = rf.getData(data_path)

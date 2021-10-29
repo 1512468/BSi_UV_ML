@@ -8,6 +8,9 @@ rv_ad_value
 is_imp_sum
 is_ad_value
 iap_count
-iap_value_sum
-ad_value_sum
-user_value_sum
+iap_value
+ad_value
+user_value
+app_exception_fatal_sum
+app_exception_non_fatal_sum
+bn_ad_value
