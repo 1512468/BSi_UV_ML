@@ -1,6 +1,6 @@
 #!/bin/bash
 yesterday=$(date -d '- 1 day' '+%Y-%m-%d');
-
-cp /root/git_ml/output/BCiCN_$yesterday.csv /root/docker-airflow/plugins/ML/output
+project=('BCiCN')
+cp /root/git_ml/$project/output/BCiCN_$yesterday.csv /root/docker-airflow/plugins/ML/output
 
 echo done
