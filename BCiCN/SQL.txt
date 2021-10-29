@@ -8,16 +8,16 @@ WITH
             
 
             ,applovin_rev_data AS (
-                SELECT * FROM `bubble-classic-718da.raw_applovin.user_ad_revenue_ios_cn_*`
-                WHERE _TABLE_SUFFIX BETWEEN '{install_date}' AND '{execution_date}' 
+                SELECT * FROM `bubble-classic-718da.dimention.BCiCN_app`
+                WHERE act_date
+                BETWEEN '{install_date}' AND '{execution_date}' 
             
             )
             ,af_data AS
-            (SELECT COALESCE(advertising_id, IDFA, IDFV) AS IDFA_OR_IDFV, 
-            COALESCE(MAX(Media_Source), 'Organic') AS Media_Source,
-            FROM `bubble-classic-718da.raw_af.install_event_report_ios_cn`
-            WHERE Event_Name = 'install' AND (CAST(Install_Time AS DATE) BETWEEN PARSE_DATE('%Y%m%d', '{install_date}') AND PARSE_DATE('%Y%m%d', '{execution_date}'))
-            GROUP BY IDFA_OR_IDFV)
+            (SELECT idfa_or_idfv, media_source
+            FROM `bubble-classic-718da.dimention.BCiCN_af`
+            WHERE install_date BETWEEN PARSE_DATE('%Y%m%d', '{install_date}') AND PARSE_DATE('%Y%m%d', '{execution_date}')
+            GROUP BY idfa_or_idfv)
         
         ,id AS
             (SELECT
@@ -40,13 +40,13 @@ WITH
             ,ad AS (
         SELECT 
         COALESCE(id.idfa_or_idfv, id.app_instance_id) AS ad_resettable_device_id_or_app_instance_id
-        ,CAST(DateTime AS DATE) AS act_date
-        ,SUM(COALESCE(Revenue, 0)) AS ad_value
-        ,SUM(CASE WHEN Ad_Format = "INTER" THEN COALESCE(Revenue, 0) END) AS is_ad_value
-        ,SUM(CASE WHEN Ad_Format = "REWARD" THEN COALESCE(Revenue, 0) END) AS rv_ad_value
-        ,SUM(CASE WHEN Ad_Format = "BANNER" THEN COALESCE(Revenue, 0) END) AS bn_ad_value
+        ,act_date
+        ,SUM(COALESCE(revenue, 0)) AS ad_value
+        ,SUM(CASE WHEN ad_unit = "INTER" THEN COALESCE(revenue, 0) END) AS is_ad_value
+        ,SUM(CASE WHEN ad_unit = "REWARD" THEN COALESCE(revenue, 0) END) AS rv_ad_value
+        ,SUM(CASE WHEN ad_unit = "BANNER" THEN COALESCE(revenue, 0) END) AS bn_ad_value
         FROM applovin_rev_data 
-        LEFT JOIN id ON UPPER(COALESCE(IDFA, IDFV)) = UPPER(id.idfa_or_idfv)
+        LEFT JOIN id ON UPPER(applovin_rev_data.idfa_or_idfv) = UPPER(id.idfa_or_idfv)
         GROUP BY ad_resettable_device_id_or_app_instance_id, act_date       
     )
 
@@ -56,7 +56,7 @@ WITH
             ,fd.day0_date
             ,COALESCE(MAX(fd.country), MAX(geo.country)) AS country
           
-            ,COALESCE(af_data.Media_Source, 'Organic') AS media_source
+            ,COALESCE(af_data.media_source, 'Organic') AS media_source
 
             ,DATE_DIFF(data.ts, fd.day0_date, DAY) AS day_diff
             ,data.ts AS act_date
@@ -77,7 +77,7 @@ WITH
             FROM data, UNNEST(event_params) AS p
             LEFT JOIN id ON id.app_instance_id = user_pseudo_id
             LEFT JOIN fd ON fd.resettable_device_id_or_app_instance_id = COALESCE(id.idfa_or_idfv, user_pseudo_id)
-            LEFT JOIN af_data ON af_data.IDFA_OR_IDFV = id.idfa_or_idfv
+            LEFT JOIN af_data ON af_data.idfa_or_idfv = id.idfa_or_idfv
             GROUP BY  resettable_device_id_or_app_instance_id, day0_date, act_date, day_diff, media_source)
 
         ,udata AS
