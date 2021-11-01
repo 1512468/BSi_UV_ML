@@ -11,6 +11,3 @@ iap_count
 iap_value
 ad_value
 user_value
-app_exception_fatal_sum
-app_exception_non_fatal_sum
-bn_ad_value
