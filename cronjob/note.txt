@@ -1,0 +1,5 @@
+/root/git_ml/BCi/input/cp_input.sh
+
+/root/git_ml/BCi/run_model.sh
+
+/root/git_ml/BCi/output/cp_output.sh
