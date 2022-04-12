@@ -1,5 +1,7 @@
-/root/git_ml/BCi/input/cp_input.sh
+15 23 * * * sh /root/git_ml/BCi/input/cp_input.sh
+20 22 * * * sh  /root/git_ml/BCi/run_model.sh
+25 22 * * * sh /root/git_ml/BCi/output/cp_output.sh  
 
-/root/git_ml/BCi/run_model.sh
-
-/root/git_ml/BCi/output/cp_output.sh
+30 22 * * * sh /root/git_ml/BCiCN/input/cp_input.sh
+35 22 * * * sh  /root/git_ml/BCiCN/run_model.sh
+40 22 * * * sh /root/git_ml/BCiCN/output/cp_output.sh 

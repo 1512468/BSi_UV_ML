@@ -1,3 +1,4 @@
+from logging import critical
 import ReadFile as  rf
 import preprocess as pp
 import pandas as pd
@@ -5,11 +6,12 @@ from datetime import date
 from datetime import timedelta
 project_code='BCi'
 path = '/root/git_ml/{}/'.format(project_code)
-data_path = path + 'input/BCi_{}.csv'.format((date.today() - timedelta(1)).strftime("%Y-%m-%d"))
+critical_date=timedelta(1)
+data_path = path + 'input/BCi_{}.csv'.format((date.today() - critical_date).strftime("%Y-%m-%d"))
 dimension = path + 'dimension_col.txt'
 fact = path + 'fact_col.txt'
 model = path + 'model_2021-08-24.json'
-output_path = path + 'output/BCi_{}.csv'.format((date.today() - timedelta(1)).strftime("%Y-%m-%d"))
+output_path = path + 'output/BCi_{}.csv'.format((date.today() - critical_date).strftime("%Y-%m-%d"))
 
 data = rf.getData(data_path)
 
